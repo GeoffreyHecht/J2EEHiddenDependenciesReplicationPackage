@@ -1,0 +1,246 @@
+/**
+* Set of rules specific to Remote Method Invocation
+* which are common to all EJB types (session, entity and message beans).  
+**/
+
+global Logger logger;
+global java.util.List statefulList;
+
+
+rule "BeanInvocation"
+    when
+        $ejbHomeInterface : InterfaceUnitAdapter( isExtends("javax.ejb.EJBLocalHome") || isExtends("javax.ejb.EJBHome") || isExtends("EJBLocalHome") || isExtends("EJBHome"))
+        $toMethod: MethodUnitAdapter ( isEnclosingInterface($ejbHomeInterface), isNamedLike("(create)(.*)") )
+        $call : CallsAdapter( toMethod == $toMethod )
+    then
+        String fromClassName=  $call.getEnclosingClass()!=null?$call.getEnclosingClass().getName():"??";
+        String fromMethodName=  $call.getEnclosingMethod()!=null?$call.getEnclosingMethod().getName():"??";
+        ClassUnitAdapter beanClass = $ejbHomeInterface.getRelatedCodeUnitByStereotype("BEAN_CLASS");
+        String methodNameInBeanClass = "ejbCreate";
+        if(beanClass!=null){
+            MethodUnitAdapter method4NewCall = 
+                    beanClass.getMethodByNameAndParameters(methodNameInBeanClass, $toMethod.getSignatureParameters());
+            if(method4NewCall!=null){
+                $call.createSiblingCallTo(method4NewCall);
+                logger.info( "[BeanInvocation] Adding call link to method "+ beanClass.getName()+"."+method4NewCall.getName());
+            }
+        }
+end
+
+rule "BeanPostInvocation"
+    when
+        $ejbHomeInterface : InterfaceUnitAdapter( isExtends("javax.ejb.EJBLocalHome") || isExtends("javax.ejb.EJBHome") || isExtends("EJBLocalHome") || isExtends("EJBHome"))
+        $toMethod: MethodUnitAdapter ( isEnclosingInterface($ejbHomeInterface), isNamedLike("(create)(.*)") )
+        $call : CallsAdapter( toMethod == $toMethod )
+    then
+        String fromClassName=  $call.getEnclosingClass()!=null?$call.getEnclosingClass().getName():"??";
+        String fromMethodName=  $call.getEnclosingMethod()!=null?$call.getEnclosingMethod().getName():"??";
+        ClassUnitAdapter beanClass = $ejbHomeInterface.getRelatedCodeUnitByStereotype("BEAN_CLASS");
+        String methodNameInBeanClass = "ejbPostCreate";
+        if(beanClass!=null){
+            MethodUnitAdapter method4NewCall = 
+                    beanClass.getMethodByNameAndParameters(methodNameInBeanClass, $toMethod.getSignatureParameters());
+            if(method4NewCall!=null){
+                $call.createSiblingCallTo(method4NewCall);
+              logger.info( "[BeanPostInvocation] Adding call link to method "+ beanClass.getName()+"."+method4NewCall.getName() );
+            }
+        }
+end
+
+rule "BeanRemoval"
+    when
+        $ejbHomeInterface : InterfaceUnitAdapter( isExtends("javax.ejb.EJBLocalHome") || isExtends("javax.ejb.EJBHome") || isExtends("EJBLocalHome") || isExtends("EJBHome"))
+        $toMethod: MethodUnitAdapter ( isEnclosingInterface($ejbHomeInterface), isNamedLike("(remove)()") )
+        $call : CallsAdapter( toMethod == $toMethod )
+    then
+        String fromClassName=  $call.getEnclosingClass()!=null?$call.getEnclosingClass().getName():"??";
+        String fromMethodName=  $call.getEnclosingMethod()!=null?$call.getEnclosingMethod().getName():"??";
+        ClassUnitAdapter beanClass = $ejbHomeInterface.getRelatedCodeUnitByStereotype("BEAN_CLASS");
+        if(beanClass!=null){
+            MethodUnitAdapter methodInBeanClass = null;
+            for( MethodUnitAdapter mu : beanClass.getMethodsByName("ejbRemove")){
+    			methodInBeanClass = mu;
+    		}
+            if(methodInBeanClass!=null){
+                $call.createSiblingCallTo(methodInBeanClass);
+                logger.info( "[BeanRemoval] Adding call link to method "+ beanClass.getName()+"."+methodInBeanClass.getName() );
+            }
+        }
+end
+
+
+
+rule "BeanMethodCall"
+    when
+        $ejbInterface : InterfaceUnitAdapter( isExtends("javax.ejb.EJBObject") || isExtends("javax.ejb.EJBLocalObject") || isExtends("EJBObject") || isExtends("EJBLocalObject") )
+        $toMethod: MethodUnitAdapter ( isEnclosingInterface($ejbInterface) )
+        $call : CallsAdapter( toMethod == $toMethod )
+    then
+        String fromClassName=  $call.getEnclosingClass()!=null?$call.getEnclosingClass().getName():"??";
+        String fromMethodName=  $call.getEnclosingMethod()!=null?$call.getEnclosingMethod().getName():"??";
+        ClassUnitAdapter beanClass = $ejbInterface.getRelatedCodeUnitByStereotype("BEAN_CLASS");
+        String methodNameInBeanClass = $toMethod.getName();
+        if(beanClass!=null){
+            MethodUnitAdapter method4NewCall = 
+                    beanClass.getMethodByNameAndParameters(methodNameInBeanClass, $toMethod.getSignatureParameters());
+            if(method4NewCall!=null){
+                $call.createSiblingCallTo(method4NewCall);
+                logger.info( " [BeanMethodCall] Adding call link from"+fromClassName +"."+fromMethodName+" to method "+ beanClass.getName()+"."+method4NewCall.getName() );
+            }
+        }
+end
+
+rule "ActivateCall"
+    when
+        $ejbInterface : InterfaceUnitAdapter( isExtends("javax.ejb.EJBObject") || isExtends("javax.ejb.EJBLocalObject") || isExtends("EJBObject") || isExtends("EJBLocalObject"))
+        $toMethod: MethodUnitAdapter (isEnclosingInterface($ejbInterface))
+        $call : CallsAdapter( toMethod == $toMethod )
+    then
+        String fromClassName=  $call.getEnclosingClass()!=null?$call.getEnclosingClass().getName():"??";
+        String fromMethodName=  $call.getEnclosingMethod()!=null?$call.getEnclosingMethod().getName():"??";
+                ClassUnitAdapter beanClass = $ejbInterface.getRelatedCodeUnitByStereotype("BEAN_CLASS");
+        String methodNameInBeanClass = $toMethod.getName();
+        if(beanClass!=null && isStatefulOrEntity(beanClass,statefulList)){
+            //System.out.println( "BeanClass is "+ beanClass.getName() );
+           MethodUnitAdapter methodInBeanClass = null;
+           MethodUnitAdapter method4NewCall = 
+                    beanClass.getMethodByNameAndParameters(methodNameInBeanClass, $toMethod.getSignatureParameters());
+            for( MethodUnitAdapter mu : beanClass.getMethodsByName("ejbActivate")){
+    			methodInBeanClass = mu;
+    		}
+            if(method4NewCall!=null && methodInBeanClass!=null){
+                $call.createSiblingCallTo(methodInBeanClass);
+                logger.info("[ActivateCall] Adding call link to method "+ beanClass.getName()+"."+methodInBeanClass.getName() );
+            }
+        }
+end
+
+rule "LoadCall"
+    when
+        $ejbInterface : InterfaceUnitAdapter( isExtends("javax.ejb.EJBObject") || isExtends("javax.ejb.EJBLocalObject") || isExtends("EJBObject") || isExtends("EJBLocalObject"))
+        $toMethod: MethodUnitAdapter (isEnclosingInterface($ejbInterface))
+        $call : CallsAdapter( toMethod == $toMethod )
+    then
+        String fromClassName=  $call.getEnclosingClass()!=null?$call.getEnclosingClass().getName():"??";
+        String fromMethodName=  $call.getEnclosingMethod()!=null?$call.getEnclosingMethod().getName():"??";        
+        ClassUnitAdapter beanClass = $ejbInterface.getRelatedCodeUnitByStereotype("BEAN_CLASS");
+        String methodNameInBeanClass = $toMethod.getName();
+        if(beanClass!=null){
+            MethodUnitAdapter methodInBeanClass = null;
+            MethodUnitAdapter method4NewCall = 
+                    beanClass.getMethodByNameAndParameters(methodNameInBeanClass, $toMethod.getSignatureParameters());
+            for( MethodUnitAdapter mu : beanClass.getMethodsByName("ejbLoad")){
+    			methodInBeanClass = mu;
+    		}
+            if(method4NewCall!=null && methodInBeanClass!=null){
+                $call.createSiblingCallTo(methodInBeanClass);
+                logger.info( "[LoadCall] Adding call link to method "+ beanClass.getName()+"."+methodInBeanClass.getName() );
+            }
+        }
+end
+
+rule "StoreCall"
+   when
+        $ejbHomeInterface : InterfaceUnitAdapter( isExtends("javax.ejb.EJBLocalHome") || isExtends("javax.ejb.EJBHome") || isExtends("EJBLocalHome") || isExtends("EJBHome"))
+        $toMethod: MethodUnitAdapter ( isEnclosingInterface($ejbHomeInterface), isNamedLike("(create)(.*)") )
+        $call : CallsAdapter( toMethod == $toMethod )
+    then
+        String fromClassName=  $call.getEnclosingClass()!=null?$call.getEnclosingClass().getName():"??";
+        String fromMethodName=  $call.getEnclosingMethod()!=null?$call.getEnclosingMethod().getName():"??";
+        ClassUnitAdapter beanClass = $ejbHomeInterface.getRelatedCodeUnitByStereotype("BEAN_CLASS");
+        if(beanClass!=null){
+            MethodUnitAdapter methodInBeanClass = null;
+            for( MethodUnitAdapter mu : beanClass.getMethodsByName("ejbStore")){
+    			methodInBeanClass = mu;
+    		}
+            if(methodInBeanClass!=null){
+                $call.createSiblingCallTo(methodInBeanClass);
+                logger.info( "[StoreCall] Adding call link to method "+ beanClass.getName()+"."+methodInBeanClass.getName() );
+            }
+        }
+end
+
+rule "PassivateCall"
+   when
+        $ejbHomeInterface : InterfaceUnitAdapter( isExtends("javax.ejb.EJBLocalHome") || isExtends("javax.ejb.EJBHome") || isExtends("EJBLocalHome") || isExtends("EJBHome"))
+        $toMethod: MethodUnitAdapter ( isEnclosingInterface($ejbHomeInterface), isNamedLike("(create)(.*)") )
+        $call : CallsAdapter( toMethod == $toMethod )
+    then
+        String fromClassName=  $call.getEnclosingClass()!=null?$call.getEnclosingClass().getName():"??";
+        String fromMethodName=  $call.getEnclosingMethod()!=null?$call.getEnclosingMethod().getName():"??";
+        ClassUnitAdapter beanClass = $ejbHomeInterface.getRelatedCodeUnitByStereotype("BEAN_CLASS");
+        if(beanClass!=null && isStatefulOrEntity(beanClass,statefulList)){
+            MethodUnitAdapter methodInBeanClass = null;
+            for( MethodUnitAdapter mu : beanClass.getMethodsByName("ejbPassivate")){
+    			methodInBeanClass = mu;
+    		}
+            if(methodInBeanClass!=null){
+                $call.createSiblingCallTo(methodInBeanClass);
+                logger.info( "[PassivateCall] Adding call link to method "+ beanClass.getName()+"."+methodInBeanClass.getName() );
+            }
+        }
+end
+
+
+rule "BeanSessionContext"
+   when
+    	$ejbHomeInterface : InterfaceUnitAdapter( isExtends("javax.ejb.EJBLocalHome") || isExtends("javax.ejb.EJBHome") || isExtends("EJBLocalHome") || isExtends("EJBHome"))
+        $toMethod: MethodUnitAdapter ( isEnclosingInterface($ejbHomeInterface), isNamedLike("(create)(.*)") )
+        $call : CallsAdapter( toMethod == $toMethod )
+    then
+    	String fromClassName=  $call.getEnclosingClass()!=null?$call.getEnclosingClass().getName():"??";
+    	String fromMethodName=  $call.getEnclosingMethod()!=null?$call.getEnclosingMethod().getName():"??";
+    	ClassUnitAdapter beanClass = $ejbHomeInterface.getRelatedCodeUnitByStereotype("BEAN_CLASS"); 	
+    	if(beanClass!=null){
+    		MethodUnitAdapter methodInBeanClass = null;
+    		for( MethodUnitAdapter mu : beanClass.getMethodsByName("setSessionContext")){
+    			methodInBeanClass = mu;
+    		}
+    		if(methodInBeanClass!=null){
+    		$call.createSiblingCallTo(methodInBeanClass);
+    				logger.info( "[BeanSessionContext] Adding call link to method "+ beanClass.getName()+"."+methodInBeanClass.getName() );
+    		}
+    	}
+end
+
+rule "BeanEntityContext"
+   when
+    	$ejbHomeInterface : InterfaceUnitAdapter( isExtends("javax.ejb.EJBLocalHome") || isExtends("javax.ejb.EJBHome") || isExtends("EJBLocalHome") || isExtends("EJBHome"))
+        $toMethod: MethodUnitAdapter ( isEnclosingInterface($ejbHomeInterface), isNamedLike("(create)(.*)") )
+        $call : CallsAdapter( toMethod == $toMethod )
+    then
+    	String fromClassName=  $call.getEnclosingClass()!=null?$call.getEnclosingClass().getName():"??";
+    	String fromMethodName=  $call.getEnclosingMethod()!=null?$call.getEnclosingMethod().getName():"??";
+    	ClassUnitAdapter beanClass = $ejbHomeInterface.getRelatedCodeUnitByStereotype("BEAN_CLASS"); 	
+    	if(beanClass!=null){
+    		MethodUnitAdapter methodInBeanClass = null;
+    		for( MethodUnitAdapter mu : beanClass.getMethodsByName("setEntityContext")){
+    			methodInBeanClass = mu;
+    		}
+    		if(methodInBeanClass!=null){
+    				$call.createSiblingCallTo(methodInBeanClass);
+    				logger.info( "[BeanEntityContext] Adding call link to method "+ beanClass.getName()+"."+methodInBeanClass.getName() );
+    		}
+    	}
+end
+
+rule "BeanEntityContextUnset"
+   when
+    	$ejbHomeInterface : InterfaceUnitAdapter( isExtends("javax.ejb.EJBLocalHome") || isExtends("javax.ejb.EJBHome") || isExtends("EJBLocalHome") || isExtends("EJBHome"))
+        $toMethod: MethodUnitAdapter ( isEnclosingInterface($ejbHomeInterface), isNamedLike("(remove)()") )
+        $call : CallsAdapter( toMethod == $toMethod )
+    then
+    	String fromClassName=  $call.getEnclosingClass()!=null?$call.getEnclosingClass().getName():"??";
+    	String fromMethodName=  $call.getEnclosingMethod()!=null?$call.getEnclosingMethod().getName():"??";
+    	ClassUnitAdapter beanClass = $ejbHomeInterface.getRelatedCodeUnitByStereotype("BEAN_CLASS"); 	
+    	if(beanClass!=null){
+    		MethodUnitAdapter methodInBeanClass = null;
+    		for( MethodUnitAdapter mu : beanClass.getMethodsByName("unsetEntityContext")){
+    			methodInBeanClass = mu;
+    		}
+    		if(methodInBeanClass!=null){
+    				$call.createSiblingCallTo(methodInBeanClass);
+    				logger.info( "[BeanEntityContextUnset] Adding call link to method "+ beanClass.getName()+"."+methodInBeanClass.getName() );
+    		}
+    	}
+end
